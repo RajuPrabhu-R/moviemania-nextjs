@@ -40,10 +40,10 @@ const GenrePill = ({ genre, mediaType, onNavigate }) => {
 export default function MovieDetails({ id, type, onClose }) {
   const router = useRouter();
   const { isInMyList, toggleMyList, isBlurEnabled, setIsBlurEnabled } = useGlobalContext();
-  
+
   const [movieData, setMovieData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   const [cast, setCast] = useState([]);
   const [genres, setGenres] = useState([]);
   const [runtime, setRuntime] = useState(null);
@@ -58,9 +58,35 @@ export default function MovieDetails({ id, type, onClose }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // --- NEW: Animation State ---
+  const [isVisible, setIsVisible] = useState(false);
+
+  // 1. Trigger the entry animation slightly after component mounts
+  useEffect(() => {
+    const timer = setTimeout(() => setIsVisible(true), 10);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // 2. Safely lock and unlock the body scroll so it doesn't cause black screens
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = "hidden";
+    
+    return () => {
+      document.body.style.overflow = originalStyle;
+      document.body.style.height = "auto";
+    };
+  }, []);
+
+  // 3. Custom Close Handler that triggers exit animation first
   const handleSmoothClose = () => {
-    if (onClose) onClose();
-    else router.back(); 
+    setIsVisible(false); // Trigger fade/scale out
+    
+    // Wait 300ms for CSS transition to finish before navigating
+    setTimeout(() => {
+      if (onClose) onClose();
+      else router.back(); 
+    }, 300); 
   };
 
   const isTV = type === "tv";
@@ -214,9 +240,13 @@ export default function MovieDetails({ id, type, onClose }) {
   }
 
   // MAIN UI
+  // --- NEW: CSS classes added to the main wrapper for animation ---
   return (
-    <div className="fixed inset-0 z-[200] w-full h-full bg-black/95 backdrop-blur-3xl overflow-y-auto">
-      
+    <div 
+      className={`fixed inset-0 z-[200] w-full h-full bg-black/95 backdrop-blur-3xl overflow-y-auto transform transition-all duration-300 ease-out origin-center ${
+        isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95"
+      }`}
+    >
       {backdropUrl && (
         <div className="absolute top-0 left-0 right-0 h-[55vh] z-0 pointer-events-none overflow-hidden">
           <img
