@@ -58,20 +58,10 @@ export default function MovieDetails({ id, type, onClose }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // --- EXACT ANIMATION STATE YOU REQUESTED ---
-  const [animateIn, setAnimateIn] = useState(false);
-
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setAnimateIn(true));
-    return () => cancelAnimationFrame(t);
-  }, []);
-
+  // Instant close - no JS delays, let Next.js do it instantly
   const handleSmoothClose = () => {
-    setAnimateIn(false);
-    setTimeout(() => {
-      if (onClose) onClose();
-      else router.back();
-    }, 250);
+    if (onClose) onClose();
+    else router.back();
   };
 
   // Safe scroll lock to prevent black screens on unmount
@@ -218,7 +208,7 @@ export default function MovieDetails({ id, type, onClose }) {
   // Loading States
   if (isLoading) {
     return (
-      <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center">
+      <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center animate-fade-in">
         <Loader2 size={40} className="animate-spin text-pink-600 mb-4" />
         <p className="text-white font-medium">Loading details...</p>
       </div>
@@ -227,7 +217,7 @@ export default function MovieDetails({ id, type, onClose }) {
 
   if (!movieData) {
     return (
-      <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center">
+      <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center animate-fade-in">
         <p className="text-white text-xl font-bold">Movie not found.</p>
         <button onClick={handleSmoothClose} className="mt-4 text-pink-500 underline">Go Back</button>
       </div>
@@ -236,11 +226,8 @@ export default function MovieDetails({ id, type, onClose }) {
 
   // MAIN UI
   return (
-    <div
-      className={`fixed inset-0 z-[200] w-full h-full bg-black/75 backdrop-blur-2xl overflow-y-auto transition-opacity duration-250 ease-out ${
-        animateIn ? "opacity-100" : "opacity-0 pointer-events-none"
-      }`}
-    >
+    <div className="fixed inset-0 z-[200] w-full h-full bg-black/75 backdrop-blur-2xl overflow-y-auto animate-fade-in">
+      
       {backdropUrl && (
         <div className="absolute top-0 left-0 right-0 h-[55vh] z-0 pointer-events-none overflow-hidden">
           <img
@@ -274,14 +261,10 @@ export default function MovieDetails({ id, type, onClose }) {
        )}
       </div>
 
-      {/* --- CONTENT WRAPPER: Exact Slide-up animation applied here --- */}
-      <div
-        className={`relative z-10 w-full max-w-5xl mx-auto px-4 pt-10 pb-24 transition-all duration-300 ${
-          animateIn ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"
-        }`}
-      >
+      {/* --- CONTENT WRAPPER: Slide up animation --- */}
+      <div className="relative z-10 w-full max-w-5xl mx-auto px-4 pt-10 pb-24 animate-slide-up">
+        
         <div className="flex flex-col md:p-15 md:flex-row gap-8 md:gap-10 items-center md:items-start">
-
           <div className="w-full md:w-[30%] lg:w-[25%] flex flex-col items-center md:items-start gap-6 shrink-0">
             <div className="relative w-[160px] sm:w-[180px] md:w-full aspect-[2/3] rounded-xl overflow-hidden shadow-2xl border border-white/[0.1]">
               <img 
