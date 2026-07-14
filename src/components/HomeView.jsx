@@ -4,19 +4,19 @@ import React, { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import InfiniteScrollTrigger from "./InfiniteScrollTrigger.jsx";
-import { HeroBanner, MovieRow, SearchDropdown, MobileMenu, NoResultsFound, TopNavBar } from "./AppComponents.jsx";
+// Added Preloader to this import!
+import { HeroBanner, MovieRow, SearchDropdown, MobileMenu, NoResultsFound, TopNavBar, Preloader } from "./AppComponents.jsx";
 import { MovieCard } from "./MovieCards.jsx";
 import { API_BASE_URL, API_KEY } from "../api/tmdb";
 import { useGlobalContext } from "@/context/GlobalProvider";
 
-// 1. Renamed to HomeContent to allow for Suspense wrapping
 const HomeContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlViewId = searchParams.get("view");
   const { category: routeCategory } = useParams();
 
-  // Ensure these have safe defaults (empty arrays/objects)
+  // Ensure these have safe defaults
   const { 
     history = [], 
     removeFromHistory = () => {}, 
@@ -54,6 +54,19 @@ const HomeContent = () => {
   const [isRowLoading, setIsRowLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState(specialViewQuery || "");
   const [searchCategory, setSearchCategory] = useState(routeCategory || "all");
+
+  // --- PRELOADER STATE ---
+  const [appReady, setAppReady] = useState(false);
+
+  // Trigger the preloader to disappear 1 second after API data is ready
+  useEffect(() => {
+    if (!isInitialLoading) {
+      const timer = setTimeout(() => {
+        setAppReady(true);
+      }, 1000); 
+      return () => clearTimeout(timer);
+    }
+  }, [isInitialLoading]);
 
   const isSpecialView = specialViewType === "search" || !!urlViewId;
 
@@ -166,8 +179,10 @@ const HomeContent = () => {
   };
 
   return (
-    // ANIMATION ADDED: animate-fade-in applied to the root layout container
     <div className="bg-[#000000] min-h-screen text-white animate-fade-in">
+      {/* WIRED PRELOADER */}
+      <Preloader isLoaded={appReady} />
+
       <TopNavBar 
         isMenuOpen={isMenuOpen}
         setIsMenuOpen={setIsMenuOpen}
@@ -198,7 +213,6 @@ const HomeContent = () => {
 
         <div className="relative z-10 mb-20">
           {isSpecialView ? (
-            // ANIMATION ADDED: animate-slide-up applied to the special view content block
             <div className="pt-10 px-4 max-w-6xl mx-auto min-h-screen animate-slide-up">
               <div className="flex items-center gap-4 mb-8">
                 <button onClick={handleBack} className="w-20 h-10 rounded-lg bg-[#141414] border border-white/5 flex items-center justify-center text-white hover:bg-[#1f1f1f] transition-colors">
@@ -228,7 +242,6 @@ const HomeContent = () => {
               />
             </div>
           ) : (
-            // ANIMATION ADDED: animate-slide-up applied to the row groupings
             <div className="pb-5 space-y-8 pt-4 animate-slide-up">
               {watchHistory.length > 0 && <MovieRow title="Your Recent History" movies={watchHistory} onRemoveItem={handleRemoveFromHistory} isLoading={false} isBlurEnabled={isBlurEnabled} />}
 
@@ -248,7 +261,6 @@ const HomeContent = () => {
   );
 };
 
-// 2. Export wrapped in Suspense to prevent Next.js build errors and runtime crashes
 export default function HomeView() {
   return (
     <Suspense 
