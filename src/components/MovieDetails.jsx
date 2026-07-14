@@ -58,36 +58,31 @@ export default function MovieDetails({ id, type, onClose }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // --- NEW: Animation State ---
-  const [isVisible, setIsVisible] = useState(false);
+  // --- EXACT ANIMATION STATE YOU REQUESTED ---
+  const [animateIn, setAnimateIn] = useState(false);
 
-  // 1. Trigger the entry animation slightly after component mounts
   useEffect(() => {
-    const timer = setTimeout(() => setIsVisible(true), 10);
-    return () => clearTimeout(timer);
+    const t = requestAnimationFrame(() => setAnimateIn(true));
+    return () => cancelAnimationFrame(t);
   }, []);
 
-  // 2. Safely lock and unlock the body scroll so it doesn't cause black screens
+  const handleSmoothClose = () => {
+    setAnimateIn(false);
+    setTimeout(() => {
+      if (onClose) onClose();
+      else router.back();
+    }, 250);
+  };
+
+  // Safe scroll lock to prevent black screens on unmount
   useEffect(() => {
     const originalStyle = window.getComputedStyle(document.body).overflow;
     document.body.style.overflow = "hidden";
-    
-    return () => {
+    return () => { 
       document.body.style.overflow = originalStyle;
       document.body.style.height = "auto";
     };
   }, []);
-
-  // 3. Custom Close Handler that triggers exit animation first
-  const handleSmoothClose = () => {
-    setIsVisible(false); // Trigger fade/scale out
-    
-    // Wait 300ms for CSS transition to finish before navigating
-    setTimeout(() => {
-      if (onClose) onClose();
-      else router.back(); 
-    }, 300); 
-  };
 
   const isTV = type === "tv";
   const mediaType = isTV ? "tv" : "movie";
@@ -240,11 +235,10 @@ export default function MovieDetails({ id, type, onClose }) {
   }
 
   // MAIN UI
-  // --- NEW: CSS classes added to the main wrapper for animation ---
   return (
-    <div 
-      className={`fixed inset-0 z-[200] w-full h-full bg-black/95 backdrop-blur-3xl overflow-y-auto transform transition-all duration-300 ease-out origin-center ${
-        isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95"
+    <div
+      className={`fixed inset-0 z-[200] w-full h-full bg-black/75 backdrop-blur-2xl overflow-y-auto transition-opacity duration-250 ease-out ${
+        animateIn ? "opacity-100" : "opacity-0 pointer-events-none"
       }`}
     >
       {backdropUrl && (
@@ -280,7 +274,12 @@ export default function MovieDetails({ id, type, onClose }) {
        )}
       </div>
 
-      <div className="relative z-10 w-full max-w-5xl mx-auto px-4 pt-10 pb-24">
+      {/* --- CONTENT WRAPPER: Exact Slide-up animation applied here --- */}
+      <div
+        className={`relative z-10 w-full max-w-5xl mx-auto px-4 pt-10 pb-24 transition-all duration-300 ${
+          animateIn ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"
+        }`}
+      >
         <div className="flex flex-col md:p-15 md:flex-row gap-8 md:gap-10 items-center md:items-start">
 
           <div className="w-full md:w-[30%] lg:w-[25%] flex flex-col items-center md:items-start gap-6 shrink-0">
