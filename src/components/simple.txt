@@ -1,0 +1,1573 @@
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useSwipeable } from "react-swipeable";
+import { Link, useNavigate, useLocation,  useSearchParams } from "react-router-dom";
+import {
+  Star,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  Play,
+  Loader2,
+  ChevronUp,
+  TextAlignStart,
+  TvMinimal,
+  X,
+  Eye,
+  EyeOff,
+  Home,
+  History,
+  Flame,
+  Tv,
+  Clapperboard,
+  Trash2,
+  Heart,
+} from "lucide-react";
+import { MovieCardSkeleton } from "../hooks/MovieCardSkeleton.jsx";
+import { createSlug } from "../utils/helpers";
+import { HistoryRowCard, MovieCard, TrendingMovieCard } from "./MovieCards.jsx";
+import { Footer } from "./Footer.jsx";
+import { HeroBanner } from "./HeroBanner.jsx";
+import { API_BASE_URL, API_KEY } from "../api/tmdb";
+
+//const API_BASE_URL = "https://api.themoviedb.org/3";
+//const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
+
+export const RowLoader = () => (
+  <div className="col-span-full py-20 flex flex-col items-center justify-center text-white/50">
+    <img src="/Itachi-sharingan.png" className="w-8 h-8 animate-spin" alt="Logo" />
+    <span className="mt-3 text-lg">Fetching content...</span>
+  </div>
+);
+
+export const NoResultsFound = ({ query }) => (
+  <div className="col-span-full py-20 flex flex-col items-center justify-center text-white/90 mx-4">
+    <Search size={48} className="mb-4 text-pink-600" />
+    <h3 className="text-2xl font-semibold mb-2">No Results Found</h3>
+    <p className="text-lg text-center max-w-md px-4">
+      We couldn't find any matching results for <span className="text-pink-600">"{query}".</span>
+    </p>
+  </div>
+);
+
+export const Preloader = ({ isLoaded }) => {
+  const [hidden, setHidden] = useState(false);
+
+  useEffect(() => {
+    if (isLoaded) {
+      const timer = setTimeout(() => setHidden(true), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoaded]);
+
+  if (hidden) return null;
+
+  return (
+    <div
+      className={`fixed inset-0 z-[9000] bg-[#0a0a0a] flex flex-col items-center justify-center transition-opacity duration-1000 ${
+        isLoaded ? "opacity-0" : "opacity-100"
+      }`}
+    >
+      <img
+        src="/Itachi-sharingan.png"
+        className={`w-20 h-20 md:w-28 md:h-28 animate-spin transition-all duration-1000 ${
+          isLoaded ? "scale-75" : "scale-100"
+        }`}
+        alt="Loading Logo"
+      />
+      <h1 className="mt-6 text-3xl font-extrabold text-white transition-opacity duration-500">
+        MovieMania
+      </h1>
+      <p className="mt-2 text-sm text-gray-500 transition-opacity duration-500 delay-300">
+        Loading cinematic experience...
+      </p>
+    </div>
+  );
+};
+
+export const ScrollToTopButton = () => {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const toggleVisibility = () => {
+      if (window.pageYOffset > 400) {
+        setIsVisible(true);
+      } else {
+        setIsVisible(false);
+      }
+    };
+
+    window.addEventListener("scroll", toggleVisibility);
+    return () => window.removeEventListener("scroll", toggleVisibility);
+  }, []);
+
+  const scrollToTopButton = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  };
+
+  return (
+    <button
+      onClick={scrollToTopButton}
+      className={`fixed bottom-10 right-6 z-[80] p-3 rounded-full bg-pink-600 text-white shadow-2xl transition-all duration-500 hover:bg-pink-500 hover:scale-110 active:scale-95 border border-white/20 group ${
+        isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10 pointer-events-none"
+      }`}
+      aria-label="Scroll to top"
+    >
+      <ChevronUp size={24} strokeWidth={3} className="group-hover:-translate-y-1 transition-transform" />
+    </button>
+  );
+};
+
+
+export const ScrollToTop = () => {
+  // Extract the current pathname from the URL
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    // Scroll the window to the top-left corner whenever the route changes
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null; // This component doesn't render any visual UI
+};
+
+
+
+export const MovieRow = ({ title, movies, isLoading, onRemoveItem, isBlurEnabled }) => {
+  const isHistoryRow = title === "Your Recent History";
+  const isCuratedRow = title === "Hand-Picked for You";
+  const shouldShowContent = !isLoading && movies && movies.length > 0;
+  const isTrendingRow = title.includes("Trending");
+  const isAdultRow = title.includes("18+");
+
+  if (!shouldShowContent && !isLoading) return null;
+
+  let cardWidthClass = "w-[115px] md:w-[160px]";
+  if (isTrendingRow) cardWidthClass = "w-[160px] md:w-[220px]";
+  if (isHistoryRow) cardWidthClass = "w-[220px] md:w-[320px]";
+
+  const viewKey = isCuratedRow ? "curated"
+    : title.includes("Trending") ? "trending"
+    : title.includes("Top Rated") ? "topRated"
+    : title.includes("Series") ? "tv"
+    : title.includes("Romance") ? "romance"
+    : title.includes("Movies") ? "animeMovies"
+    : title.includes("Action") ? "actionMovies"
+    : title.includes("18+") ? "matureAnime"
+    : null;
+
+  return (
+    <section className={`mb-3 md:mb-6 relative mt-8 md:mt-10 group/row z-10 ${isAdultRow ? 'border-l-4 border-red-600 bg-gradient-to-r from-red-600/5 to-transparent py-4' : ''}`}>
+      <div className="px-4 md:px-12 mb-2 md:mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {isAdultRow && <Info className="text-red-600 animate-pulse" size={20} />}
+          {isCuratedRow && <Star className="text-pink-500" size={20} fill="currentColor" />}
+          <h2 className={`text-lg md:text-2xl font-bold transition-colors ${isAdultRow ? 'text-red-600 uppercase tracking-widest' : 'text-[#e5e5e5] group-hover/row:text-white'}`}>
+            {title}
+          </h2>
+        </div>
+
+        {viewKey && !isHistoryRow && (
+          <Link to={`/?view=${viewKey}`} className="text-xs md:text-sm font-bold text-pink-600 hover:text-pink-400 transition-colors flex items-center gap-1 uppercase tracking-tighter">
+            Explore All <ChevronRight size={16} />
+          </Link>
+        )}
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto overflow-y-hidden scroll-smooth scrollbar-hide pb-2 snap-center pl-4 md:pl-12">
+        {shouldShowContent &&
+          movies.map((movie, index) => (
+            <div key={`${movie.id}-${index}-${title}`} className={`${cardWidthClass} flex-shrink-0`}>
+              {isTrendingRow ? (
+                <TrendingMovieCard movie={movie} index={index} />
+              ) : isHistoryRow ? (
+                <HistoryRowCard movie={movie} onRemove={onRemoveItem} />
+              ) : (
+                <MovieCard
+                  movie={movie}
+                  index={index}
+                  isSpecialView={false}
+                  onRemove={undefined}
+                  isBlurEnabled={isBlurEnabled}
+                  isCurated={isCuratedRow}
+                />
+              )}
+            </div>
+          ))}
+
+        {isLoading &&
+          Array(10)
+            .fill(0)
+            .map((_, index) => (
+              <div key={index} className={`${cardWidthClass} flex-shrink-0`}>
+                <MovieCardSkeleton />
+              </div>
+            ))}
+      </div>
+    </section>
+  );
+};
+
+
+export const MenuLink = ({ to, label, onClick, small, icon }) => (
+  <Link
+    to={to}
+    onClick={onClick}
+    className={`group flex items-center gap-4 px-4 py-3 rounded-lg transition-all duration-300 hover:bg-pink-600/10 hover:translate-x-2 ${
+      small ? "text-lg font-medium text-gray-400" : "text-2xl font-bold text-white"
+    }`}
+  >
+    <span className="text-pink-600/80 group-hover:text-pink-500 transition-colors">{icon}</span>
+    <span className="group-hover:text-pink-500 transition-colors flex-1">{label}</span>
+    <ChevronRight size={18} className="opacity-0 group-hover:opacity-100 text-pink-500 transition-all -translate-x-2 group-hover:translate-x-0" />
+  </Link>
+);
+
+export const MobileMenu = ({ isOpen, setIsOpen, onHomeClick }) => (
+  <div className={`fixed inset-0 z-[100] transition-all duration-500 ease-in-out ${
+    isOpen ? "opacity-100 visible" : "opacity-0 invisible"
+  }`}>
+    <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setIsOpen(false)} />
+    <div className={`absolute top-0 left-0 h-full w-[280px] md:w-[350px] bg-[#0a0a0a]/90 backdrop-blur-xl border-r border-white/10 shadow-2xl transform transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+      isOpen ? "translate-x-0" : "-translate-x-full"
+    }`}>
+      <div className="p-6 flex flex-col h-full">
+        <div className="flex justify-between items-center mb-10 overflow-y-auto">
+          <div className="flex items-center gap-2">
+            <img src="/Itachi-sharingan.png" className="w-8 h-8 animate-spin" alt="Logo" />
+            <span className="text-xl font-black tracking-tighter text-pink-600">Navigate</span>
+          </div>
+          <button onClick={() => setIsOpen(false)} className="p-2 text-white/70 hover:text-pink-500 transition-colors">
+            <X size={28} />
+          </button>
+        </div>
+        <nav className="space-y-1">
+          <MenuLink to="/" label="Home" icon={<Home size={22} />} onClick={onHomeClick} />
+          <MenuLink to="/history" label="Watch History" icon={<History size={22} />} onClick={() => setIsOpen(false)} />
+          <div className="pt-8 pb-4">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-gray-500 font-bold ml-4 mb-4">Categories</p>
+            <div className="space-y-1">
+              <MenuLink to="/?view=curated" label="Hand-Picked" icon={<Star size={18} />} onClick={() => setIsOpen(false)} small />
+              <MenuLink to="/?view=trending" label="Trending Anime" icon={<Flame size={18} />} onClick={() => setIsOpen(false)} small />
+              <MenuLink to="/?view=tv" label="Anime Series" icon={<Tv size={18} />} onClick={() => setIsOpen(false)} small />
+              <MenuLink to="/?view=romance" label="Romance Anime" icon={<Heart size={18} />} onClick={() => setIsOpen(false)} small />
+              <MenuLink to="/?view=animeMovies" label="Anime Movies" icon={<Clapperboard size={18} />} onClick={() => setIsOpen(false)} small />
+              <MenuLink to="/?view=matureAnime" label="18+ Mature Anime" icon={<EyeOff size={18} />} onClick={() => setIsOpen(false)} small />
+            </div>
+          </div>
+        </nav>
+      </div>
+    </div>
+  </div>
+);
+
+export const SearchDropdown = ({ results, onSelect, onClear }) => {
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        onClear();
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [onClear]);
+
+  if (!results.length) return null;
+
+  return (
+    <div ref={dropdownRef} className="w-full mt-2 p-2 bg-[#141414] rounded shadow-2xl border border-gray-800 animate-fade-in">
+      <div className="flex flex-col gap-1 max-h-[60vh] overflow-y-auto">
+        {results.map((movie) => {
+          const type = movie.media_type || (movie.title ? "movie" : "tv");
+          const title = movie.title || movie.name;
+          const slug = createSlug(title);
+          const year = (movie.release_date || movie.first_air_date || "").split("-")[0];
+          return (
+            <Link
+              key={`${movie.id}-dropdown`}
+              to={`/movie/${movie.id}/${slug}?type=${type}`}
+              onClick={onSelect}
+              className="flex items-center gap-3 p-2 rounded hover:bg-gray-800 transition"
+            >
+              <img
+                src={movie.poster_path ? `https://image.tmdb.org/t/p/w92${movie.poster_path}` : "/No-Poster.png"}
+                className="w-10 h-14 object-cover rounded"
+                alt=""
+              />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-white text-sm truncate">{title}</p>
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <span>{year}</span>
+                  {movie.vote_average > 0 && <span className="text-green-500 font-bold">{movie.vote_average.toFixed(1)}</span>}
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+
+
+export const WatchHistoryView = ({ history, clearHistory, removeFromHistory, isBlurEnabled }) => {
+  const navigate = useNavigate();
+  return (
+    <div className="h-dvh bg-black pt-2 px-3 max-w-6xl mx-auto">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+        <h1 className="text-3xl font-bold text-white">Watch History</h1>
+        <div className="flex gap-4">
+          <button onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
+            <Home size={20} /> Home
+          </button>
+          <button onClick={clearHistory} disabled={!history.length} className="flex items-center gap-2 bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white px-4 py-2 rounded-lg font-semibold disabled:opacity-50 transition-all">
+            <Trash2 size={20} /> Clear All
+          </button>
+        </div>
+      </div>
+
+      {!history.length ? (
+        <div className="text-center py-20 text-gray-500">
+          <TvMinimal size={48} className="mx-auto mb-4 opacity-50" />
+          <p>No watch history yet. Start watching something!</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-20">
+          {history.map((item, idx) => (
+            <HistoryRowCard key={`${item.id}-${idx}-history`} movie={item} onRemove={removeFromHistory} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Re-export movie card components for backward compatibility
+export { HistoryRowCard, MovieCard, TrendingMovieCard } from "./MovieCards.jsx";
+export { Footer } from "./Footer.jsx";
+export { HeroBanner } from "./HeroBanner.jsx";
+
+
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useSwipeable } from "react-swipeable";
+import { useNavigate } from "react-router-dom";
+import { Play, Info } from "lucide-react";
+import { API_BASE_URL, API_KEY } from "../api/tmdb";
+import { HeroBannerSkeleton } from "../hooks/HeroBannerSkeleton.jsx";
+import { createSlug } from "../utils/helpers";
+
+export const HeroBanner = ({ heroMovies, isLoading }) => {
+  const navigate = useNavigate();
+  const [heroIndex, setHeroIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [logoPath, setLogoPath] = useState(null);
+  const [isLogoLoading, setIsLogoLoading] = useState(false);
+  const [isFading, setIsFading] = useState(false);
+
+  const moviesToDisplay = useMemo(() => heroMovies.slice(1, 15), [heroMovies]);
+  const heroMovie = moviesToDisplay[heroIndex];
+
+  const fetchLogo = useCallback(async (id, type) => {
+    if (!id || !type) return;
+    setIsLogoLoading(true);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/${type}/${id}/images?api_key=${API_KEY}&include_adult=true`
+      );
+      const data = await res.json();
+      const logos = data.logos || [];
+      const englishLogo = logos.find((logo) => logo.iso_639_1 === "en") || logos[0];
+      setLogoPath(englishLogo?.file_path || null);
+    } catch {
+      setLogoPath(null);
+    } finally {
+      setIsLogoLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (heroMovie) {
+      const type = heroMovie.media_type || (heroMovie.title ? "movie" : "tv");
+      fetchLogo(heroMovie.id, type);
+    }
+  }, [heroMovie, fetchLogo]);
+
+  useEffect(() => {
+    if (!moviesToDisplay.length || !isPlaying) return;
+    const interval = setInterval(() => {
+      handleNext();
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [moviesToDisplay.length, isPlaying, heroIndex]);
+
+  const handleNext = useCallback(() => {
+    if (isFading) return;
+    setIsFading(true);
+    setTimeout(() => {
+      setHeroIndex((prev) => (prev + 1) % moviesToDisplay.length);
+      setIsFading(false);
+    }, 500);
+  }, [isFading, moviesToDisplay.length]);
+
+  const handlePrev = useCallback(() => {
+    if (isFading) return;
+    setIsFading(true);
+    setTimeout(() => {
+      setHeroIndex((prev) => (prev - 1 + moviesToDisplay.length) % moviesToDisplay.length);
+      setIsFading(false);
+    }, 500);
+  }, [isFading, moviesToDisplay.length]);
+
+  const swipeHandlers = useSwipeable({
+    onSwipedLeft: handleNext,
+    onSwipedRight: handlePrev,
+    trackMouse: true,
+  });
+
+  if (isLoading || !moviesToDisplay.length) return <HeroBannerSkeleton />;
+  if (!heroMovie) return null;
+
+  const tmdbType = heroMovie.media_type || (heroMovie.title ? "movie" : "tv");
+  const slug = createSlug(heroMovie.title || heroMovie.name);
+  const logoUrl = logoPath ? `https://image.tmdb.org/t/p/w500${logoPath}` : null;
+  const isAnime = heroMovie.genre_ids?.includes(16);
+
+  return (
+    <div className="relative w-full h-[600px] md:h-[700px] lg:h-[800px] xl:h-[900px] text-white animate-fade-in overflow-hidden group">
+      <div {...swipeHandlers} className="relative w-full h-full">
+        <div className={`absolute inset-0 w-full h-full transition-opacity duration-1000 ease-in-out ${isFading ? 'opacity-0' : 'opacity-100'}`}>
+          <div className="w-full h-full relative">
+            <div
+              className="w-full h-full bg-cover bg-center md:bg-top animate-subtle-zoom mask-b-from-20% mask-b-to-100%"
+              style={{
+                backgroundImage: `url(https://image.tmdb.org/t/p/original${heroMovie.backdrop_path || heroMovie.poster_path})`,
+              }}
+            />
+           {/* <div className="absolute inset-0 bg-gradient-to-r from-[#000]/80 via-[#000]/40 to-transparent z-10 w-[80%] h-[100%]" /> */}
+           {/* <div className="absolute inset-x-0 -bottom-16 h-full bg-gradient-to-t from-[#000] via-[#000]/60 to-transparent z-10" /> */}
+          </div>
+        </div>
+
+        <div className="absolute inset-0 flex flex-col justify-end px-4 md:px-12 lg:px-20 z-20 pb-20 md:pb-32 pointer-events-none">
+          <div className={`max-w-2xl lg:max-w-3xl space-y-4 md:space-y-6 pointer-events-auto transition-all duration-700 transform ${isFading ? 'opacity-0 translate-y-8' : 'opacity-100 translate-y-0'}`}>
+            {logoUrl && !isLogoLoading ? (
+              <img src={logoUrl} alt={heroMovie.title} className="w-[200px] md:w-[350px] lg:w-[450px] object-contain origin-bottom-left drop-shadow-2xl mb-4" />
+            ) : (
+              <h2 className="text-3xl md:text-5xl lg:text-7xl leading-tight tracking-tighter drop-shadow-2xl mb-4">{heroMovie.title || heroMovie.name}</h2>
+            )}
+
+            <div className="flex items-center flex-wrap gap-2 md:gap-3 text-xs md:text-sm font-semibold text-white/90 drop-shadow-md">
+              {heroMovie.vote_average > 0 && <span className="text-[#46d369] font-bold text-sm md:text-base">{(heroMovie.vote_average * 10).toFixed(0)}% Match</span>}
+              <span className="text-gray-300">{(heroMovie.release_date || heroMovie.first_air_date || "").split("-")[0]}</span>
+              {heroMovie.adult && (
+                <span className="uppercase border border-white/40 px-1.5 py-0.5 rounded-sm text-[10px] md:text-xs">18+</span>
+              )}
+              <span className="uppercase border border-white/40 px-1.5 py-0.5 rounded-sm text-[10px] md:text-xs">
+                {isAnime ? "Anime" : tmdbType === "movie" ? "Movie" : "Series"}
+              </span>
+            </div>
+
+            <p className="text-white/90 text-sm md:text-base lg:text-lg max-w-xl md:max-w-2xl line-clamp-3 md:line-clamp-4 leading-snug drop-shadow-2xl font-medium">
+              {heroMovie.overview}
+            </p>
+
+            <div className="flex items-center gap-3 pt-2 md:pt-4">
+              <button onClick={() => navigate(`/watch/${tmdbType}/${heroMovie.id}/${slug}`)} className="flex items-center justify-center gap-2 px-5 md:px-8 py-2 md:py-2.5 bg-white text-black rounded md:rounded-md font-bold text-sm md:text-xl hover:bg-white/80 transition-all">
+                <Play size={24} className="fill-black" /> Play
+              </button>
+              <button onClick={() => navigate(`/movie/${heroMovie.id}/${slug}?type=${tmdbType}`)} className="flex items-center justify-center gap-2 px-5 md:px-8 py-2 md:py-2.5 bg-[#6d6d6e]/70 text-white rounded md:rounded-md font-bold text-sm md:text-xl hover:bg-[#6d6d6e] transition-all">
+                <Info size={24} /> More Info
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 flex flex-col gap-2 z-30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 hidden md:flex">
+          {moviesToDisplay.map((_, idx) => (
+            <button key={idx} onClick={() => { setHeroIndex(idx); setIsPlaying(false); }} className={`transition-all duration-300 rounded-full ${heroIndex === idx ? "w-1.5 h-10 bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)]" : "w-1 h-3 bg-white/30 hover:bg-white/70"}`} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+import React, { useEffect, useState, useCallback } from "react";
+import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
+import { ChevronLeft, Home, Search, Eye, EyeOff, Clapperboard, Tv, History, Flame, Heart, TextAlignStart, X } from "lucide-react";
+import InfiniteScrollTrigger from "./InfiniteScrollTrigger.jsx";
+import { HeroBanner, MovieRow, SearchDropdown, MobileMenu, NoResultsFound } from "./AppComponents.jsx";
+import { MovieCard } from "./MovieCards.jsx";
+import { Footer } from "./Footer.jsx";
+import { API_BASE_URL, API_KEY } from "../api/tmdb";
+
+const HomeView = ({
+  trending,
+  tv,
+  romance,
+  animeMovies,
+  topRated,
+  actionMovies,
+  matureAnime,
+  curatedNew,
+  specialViewResults,
+  specialViewQuery,
+  specialViewType,
+  specialViewPage,
+  specialViewTotalPages,
+  isSpecialViewLoading,
+  handleSpecialViewSearch,
+  isMenuOpen,
+  setIsMenuOpen,
+  handleLiveSearch,
+  liveSearchResults,
+  setLiveSearchResults,
+  isInitialLoading,
+  watchHistory,
+  handleRemoveFromHistory,
+  isBlurEnabled,
+  setIsBlurEnabled,
+}) => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const urlViewId = searchParams.get("view");
+  const { category: routeCategory } = useParams();
+
+  const [selectedRowResults, setSelectedRowResults] = useState([]);
+  const [rowLoadMoreData, setRowLoadMoreData] = useState({ id: urlViewId || null, page: 1, total_pages: 1 });
+  const [isRowLoading, setIsRowLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState(specialViewQuery || "");
+  const [isSearchExpanded, setIsSearchExpanded] = useState(specialViewType === "search");
+  const [searchCategory, setSearchCategory] = useState(routeCategory || "all");
+
+  const isSpecialView = specialViewType === "search" || !!urlViewId;
+
+  const categories = [
+    { id: "all", label: "All" },
+    { id: "movie", label: "Movies" },
+    { id: "tv", label: "TV Shows" },
+    { id: "anime", label: "Anime" },
+  ];
+
+  const rowEndpoints = {
+    trending: "/discover/tv?with_genres=16&with_original_language=ja&sort_by=popularity.desc&page=",
+    tv: "/discover/tv?with_genres=16&with_original_language=ja&sort_by=vote_count.desc&page=",
+    romance: "romance",
+    animeMovies: "/discover/movie?with_genres=16&with_original_language=ja&page=",
+    topRated: "/discover/tv?with_genres=16&with_original_language=ja&sort_by=vote_average.desc&vote_count.gte=1000&page=",
+    matureAnime: "/discover/tv?with_genres=16&sort_by=popularity.desc &certification_country=US&certification=TV-MA&page=",
+    actionMovies: "/discover/tv?with_genres=16,10759&with_original_language=ja&page=",
+    curated: "curated",
+  };
+
+  const fetchCategoryData = useCallback(async (viewId, page) => {
+    let results = [];
+    let totalPages = 1;
+
+    try {
+      if (viewId === "curated") {
+        results = curatedNew;
+        totalPages = 1;
+      } else if (viewId === "romance") {
+        const [tvRes, movieRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/discover/tv?with_genres=16,10749&with_original_language=ja&page=${page}&api_key=${API_KEY}&include_adult=true`),
+          fetch(`${API_BASE_URL}/discover/movie?with_genres=16,10749&with_original_language=ja&page=${page}&api_key=${API_KEY}&include_adult=true`),
+        ]);
+        const tvData = await tvRes.json();
+        const movieData = await movieRes.json();
+        results = [...(tvData.results || []), ...(movieData.results || [])].sort((a, b) => b.popularity - a.popularity);
+        totalPages = Math.max(tvData.total_pages || 1, movieData.total_pages || 1);
+      } else if (rowEndpoints[viewId]) {
+        const res = await fetch(`${API_BASE_URL}${rowEndpoints[viewId]}${page}&api_key=${API_KEY}&include_adult=true`);
+        const data = await res.json();
+        results = data.results || [];
+        totalPages = data.total_pages || 1;
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    return { results, totalPages };
+  }, [curatedNew]);
+
+  useEffect(() => {
+    if (urlViewId) {
+      const initLoad = async () => {
+        window.scrollTo(0, 0);
+        setIsRowLoading(true);
+        const { results, totalPages } = await fetchCategoryData(urlViewId, 1);
+        setSelectedRowResults(results);
+        setRowLoadMoreData({ id: urlViewId, page: 1, total_pages: Math.min(totalPages, 500) });
+        setIsRowLoading(false);
+      };
+      initLoad();
+    } else {
+      setSelectedRowResults([]);
+      setRowLoadMoreData({ id: null, page: 1, total_pages: 1 });
+    }
+  }, [urlViewId, fetchCategoryData]);
+
+  const handleLoadMoreRow = async () => {
+    if (isRowLoading || rowLoadMoreData.page >= rowLoadMoreData.total_pages) return;
+    setIsRowLoading(true);
+    const nextPage = rowLoadMoreData.page + 1;
+    const { results } = await fetchCategoryData(urlViewId, nextPage);
+    setSelectedRowResults((prev) => [...prev, ...results]);
+    setRowLoadMoreData((prev) => ({ ...prev, page: nextPage }));
+    setIsRowLoading(false);
+  };
+
+  const handleBack = () => {
+    window.scrollTo(0, 0);
+    setLiveSearchResults([]);
+    setIsSearchExpanded(false);
+    navigate("/");
+  };
+
+  const handleHomeClick = () => {
+    setIsMenuOpen(false);
+    setLiveSearchResults([]);
+    setSearchTerm("");
+    setIsSearchExpanded(false);
+    navigate("/");
+    window.scrollTo(0, 0);
+  };
+
+  const handleNavigationSearch = (e) => {
+    e.preventDefault();
+    if (searchTerm.trim()) {
+      setLiveSearchResults([]);
+      setIsSearchExpanded(false);
+      navigate(`/search?s=${encodeURIComponent(searchTerm.trim())}&type=${searchCategory}`);
+    }
+  };
+
+  const handleSearchToggle = (e) => {
+    e.preventDefault();
+    if (!isSearchExpanded) setIsSearchExpanded(true);
+    else {
+      if (searchTerm.trim()) handleNavigationSearch(e);
+      else setIsSearchExpanded(false);
+    }
+  };
+
+  const currentResults = specialViewType === "search" ? specialViewResults : selectedRowResults;
+  const currentIsLoading = isSpecialViewLoading || isRowLoading;
+  const hasMore = specialViewType === "search"
+    ? specialViewPage < specialViewTotalPages
+    : rowLoadMoreData.page < rowLoadMoreData.total_pages;
+
+  const getPageTitle = () => {
+    if (specialViewType === "search") return `Results for "${specialViewQuery}"`;
+    if (urlViewId === "matureAnime") return "18+ Mature Content";
+    if (urlViewId === "curated") return "Hand-Picked For You";
+    return urlViewId;
+  };
+
+  return (
+    <>
+      <nav className={`fixed w-full top-0 z-50 transition-all duration-500 ${isSpecialView ? 'bg-[#0a0a0a]/90 backdrop-blur-md border-b border-white/5' : 'bg-gradient-to-b from-black/90 via-black/50 to-transparent'}`}>
+        <div className="flex flex-col items-center justify-center px-4 md:px-12 py-4">
+          <div className="flex items-center justify-between w-full h-16">
+            <div className="flex items-center gap-4 md:gap-8 flex-1">
+              <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="text-white hover:text-pink-600 transition-colors">
+                <TextAlignStart size={28} />
+              </button>
+              <div className="flex items-center gap-6 lg:gap-10">
+                <button onClick={handleHomeClick} className="flex items-center gap-2 group">
+                  <img src="/Itachi-sharingan.png" className="w-8 h-8 animate-spin" alt="" />
+                  <span className="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-pink-600 to-purple-600 hidden sm:block">
+                    MovieMania
+                  </span>
+                </button>
+                <div className={`flex items-center gap-2 lg:gap-8 ${isSearchExpanded ? 'hidden md:flex' : 'flex'}`}>
+                  <Link to="/" onClick={handleHomeClick} className="flex items-center gap-2 text-sm font-semibold text-gray-300 hover:text-white transition-all group py-1 px-2">
+                    <Home size={20} className="text-pink-600 group-hover:text-pink-500" />
+                    <span className="hidden lg:inline">Home</span>
+                  </Link>
+                  <Link to="/?view=animeMovies" className="flex items-center gap-2 text-sm font-semibold text-gray-300 hover:text-white transition-all group py-1 px-2">
+                    <Clapperboard size={20} className="text-pink-600 group-hover:text-pink-500" />
+                    <span className="hidden lg:inline">Anime</span>
+                  </Link>
+                  <Link to="/?view=tv" className="flex items-center gap-2 text-sm font-semibold text-gray-300 hover:text-white transition-all group py-1 px-2">
+                    <Tv size={20} className="text-pink-600 group-hover:text-pink-500" />
+                    <span className="hidden lg:inline">Anime Series</span>
+                  </Link>
+                  <Link to="/history" className="flex items-center gap-2 text-sm font-semibold text-gray-300 hover:text-white transition-all group py-1 px-2">
+                    <History size={20} className="text-pink-600 group-hover:text-pink-500" />
+                    <span className="hidden lg:inline">History</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 md:gap-5">
+              <button
+                onClick={() => setIsBlurEnabled(!isBlurEnabled)}
+                className={`flex items-center gap-2 px-2 py-2 rounded-full text-[10px] font-bold transition-all border ${isBlurEnabled ? 'bg-black/40 border-white/20 text-gray-400' : 'bg-pink-600 border-pink-500 text-white'}`}
+              >
+                {isBlurEnabled ? <EyeOff size={14} /> : <Eye size={14} />}
+                <span className="hidden sm:inline uppercase">Blur: {isBlurEnabled ? "ON" : "OFF"}</span>
+              </button>
+              <div className={`flex items-center transition-all duration-500 ${isSearchExpanded ? 'w-full md:w-[300px] bg-black/60 border border-white/20 px-4 py-2 rounded-full' : 'w-10 bg-transparent'}`}>
+                <button onClick={handleSearchToggle} className="text-white hover:text-pink-500 transition-all">
+                  {isSearchExpanded ? <X size={24} /> : <Search size={24} />}
+                </button>
+                <input
+                  type="text"
+                  placeholder="Search titles..."
+                  className={`bg-transparent border-none text-white text-sm w-full ml-3 focus:outline-none transition-all ${isSearchExpanded ? 'opacity-100' : 'opacity-0 w-0'}`}
+                  value={searchTerm}
+                  onChange={(e) => { setSearchTerm(e.target.value); handleLiveSearch(e.target.value); }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleNavigationSearch(e)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {isSearchExpanded && (
+            <div className="flex items-center gap-2 py-4 overflow-x-auto no-scrollbar w-full max-w-xl">
+              {categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSearchCategory(cat.id)}
+                  className={`px-4 py-1 rounded-full text-xs font-bold transition-all border ${
+                    searchCategory === cat.id
+                      ? 'bg-pink-600 border-pink-500 text-white'
+                      : 'bg-white/5 border-white/10 text-gray-400'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </nav>
+
+      <MobileMenu isOpen={isMenuOpen} setIsOpen={setIsMenuOpen} onHomeClick={handleHomeClick} />
+
+      <div className="min-h-screen">
+        {!isSpecialView && <HeroBanner heroMovies={trending} isLoading={isInitialLoading} />}
+        <div className="relative z-10">
+          {isSpecialView ? (
+            <div className="pt-32 px-4 max-w-6xl mx-auto min-h-screen">
+              <div className="flex items-center gap-2 mb-8">
+                <button onClick={handleBack} className="text-white hover:text-pink-500"><ChevronLeft size={28} /></button>
+                <h2 className="text-2xl font-bold capitalize">{getPageTitle()}</h2>
+              </div>
+              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-2 gap-y-6">
+                {currentResults.map((movie, idx) => (
+                  <MovieCard
+                    key={`${movie.id}-${idx}-special`}
+                    movie={movie}
+                    index={idx}
+                    isSpecialView={true}
+                    isBlurEnabled={isBlurEnabled}
+                    isCurated={urlViewId === 'curated'}
+                  />
+                ))}
+                {!currentIsLoading && currentResults.length === 0 && <NoResultsFound query={searchTerm} />}
+              </div>
+              <InfiniteScrollTrigger
+                onTrigger={specialViewType === 'search' ? handleSpecialViewSearch : handleLoadMoreRow}
+                hasMore={hasMore}
+                isLoading={currentIsLoading}
+              />
+            </div>
+          ) : (
+            <div className="-mt-10 md:-mt-32 relative z-20 pb-10 space-y-6">
+              {watchHistory.length > 0 && <MovieRow title="Your Recent History" movies={watchHistory} onRemoveItem={handleRemoveFromHistory} isLoading={false} isBlurEnabled={isBlurEnabled} />}
+
+              <MovieRow title="Hand-Picked for You" movies={curatedNew} isLoading={isInitialLoading} isBlurEnabled={isBlurEnabled} />
+              <MovieRow title="Trending Anime" movies={trending} isLoading={isInitialLoading} isBlurEnabled={isBlurEnabled} />
+              <MovieRow title="Top Rated Anime" movies={topRated} isLoading={isInitialLoading} isBlurEnabled={isBlurEnabled} />
+              <MovieRow title="Popular Anime Series" movies={tv} isLoading={isInitialLoading} isBlurEnabled={isBlurEnabled} />
+              <MovieRow title="Romance Anime" movies={romance} isLoading={isInitialLoading} isBlurEnabled={isBlurEnabled} />
+              <MovieRow title="Anime Movies" movies={animeMovies} isLoading={isInitialLoading} isBlurEnabled={isBlurEnabled} />
+              <MovieRow title="Action Anime" movies={actionMovies} isLoading={isInitialLoading} isBlurEnabled={isBlurEnabled} />
+              <MovieRow title="18+ Mature Anime" movies={matureAnime} isLoading={isInitialLoading} isBlurEnabled={isBlurEnabled} />
+            </div>
+          )}
+        </div>
+        <Footer />
+      </div>
+
+      {liveSearchResults.length > 0 && isSearchExpanded && specialViewType !== 'search' && (
+        <div className="fixed top-20 right-4 md:right-12 z-[60] w-64 md:w-80">
+          <SearchDropdown
+            results={liveSearchResults}
+            onSelect={() => setLiveSearchResults([])}
+            onClear={() => setLiveSearchResults([])}
+          />
+        </div>
+      )}
+    </>
+  );
+};
+
+export default HomeView;
+
+import React, { useEffect, useState, useMemo } from "react";
+import { 
+  Play, 
+  Plus, 
+  X, 
+  ThumbsUp, 
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Share2,
+  Eye,
+  Clapperboard,
+  Search
+} from "lucide-react"; 
+import { useNavigate } from "react-router-dom";
+import RelatedContent from "./RelatedContent"
+
+const API_BASE_URL = "https://api.themoviedb.org/3";
+const API_KEY = import.meta.env.VITE_TMDB_API_KEY; 
+
+const createSlug = (title) => {
+    if (!title) return '';
+    return title.toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .trim()
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-');
+};
+
+const MovieDetails = ({ movie, onClose }) => {
+  const navigate = useNavigate();
+
+  // --- State Hooks ---
+  const [cast, setCast] = useState([]);
+  const [genres, setGenres] = useState([]);
+  const [activeTab, setActiveTab] = useState("overview"); 
+  const [runtime, setRuntime] = useState(null); 
+  const [seasons, setSeasons] = useState([]);
+  const [episodes, setEpisodes] = useState([]);
+  const [selectedSeason, setSelectedSeason] = useState(1);
+  const [logoPath, setLogoPath] = useState(null);
+  const [recommendations, setRecommendations] = useState([]); 
+  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
+  const [spokenLanguages, setSpokenLanguages] = useState([]); 
+  const [trailer, setTrailer] = useState(null);
+  const [showTrailer, setShowTrailer] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  if (!movie) return null;
+
+  // --- Derived Data (The "Base" for the Title) ---
+  const isTV = movie.media_type === "tv" || movie.first_air_date;
+  const isAnilist = !!movie?.title?.romaji; 
+
+  // Logic to ensure the title always shows up correctly regardless of source
+  const title = useMemo(() => {
+    if (isAnilist) return movie.title.english || movie.title.romaji;
+    return movie.title || movie.name || movie.original_title || movie.original_name;
+  }, [movie, isAnilist]);
+
+  const slug = useMemo(() => createSlug(title), [title]);
+
+  const backdropUrl = `https://image.tmdb.org/t/p/original${movie.backdrop_path}`;
+  const logoUrl = logoPath ? `https://image.tmdb.org/t/p/w500${logoPath}` : null;
+  const releaseYear = isAnilist ? movie.startDate?.year : (movie.release_date || movie.first_air_date)?.split('-')[0];
+  const endYear = isTV && movie.last_air_date ? movie.last_air_date.split('-')[0] : 'Present';
+  const overview = isAnilist ? (movie.description || '').replace(/<br>/g, '') : movie.overview;
+
+  // Update Document Title as a base for the page identity
+  useEffect(() => {
+    if (title) {
+        document.title = `${title} - Watch Online`;
+    }
+    return () => { document.title = "MovieStream"; };
+  }, [title]);
+
+  // Filter episodes based on search query
+  const filteredEpisodes = useMemo(() => {
+    return episodes.filter((ep) =>
+      ep.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      ep.episode_number.toString().includes(searchQuery)
+    );
+  }, [episodes, searchQuery]);
+
+  // --- Fetch Main Details ---
+  useEffect(() => {
+    setActiveTab(isTV ? "episodes" : "recommendations");
+    setTrailer(null); 
+    setShowTrailer(false);
+    setSearchQuery("");
+
+    if (isAnilist) {
+      setGenres(movie.genres || []); 
+      setRuntime(movie.duration || null); 
+      return; 
+    }
+
+    const fetchDetails = async () => {
+      try {
+        const type = movie.media_type || (movie.title ? "movie" : "tv");
+
+        const res = await fetch(
+          `${API_BASE_URL}/${type}/${movie.id}?api_key=${API_KEY}&append_to_response=credits,images,seasons,recommendations,videos` 
+        );
+        const data = await res.json();
+
+        setGenres(data.genres || []);
+        setSpokenLanguages(data.spoken_languages || []);
+        setCast(data.credits?.cast?.slice(0, 3) || []); 
+        setRuntime(data.runtime || (data.episode_run_time?.[0] || null));
+        setSeasons(data.seasons?.filter(s => s.season_number > 0) || []);
+        setRecommendations(data.recommendations?.results?.filter(r => r.poster_path).slice(0, 12) || []);
+
+        const officialTrailer = data.videos?.results?.find(vid => vid.site === "YouTube" && vid.type === "Trailer");
+        setTrailer(officialTrailer?.key || null);
+
+        const logos = data.images?.logos || [];
+        const englishLogo = logos.find(l => l.iso_639_1 === 'en') || logos[0];
+        setLogoPath(englishLogo?.file_path || null);
+      } catch (err) {
+        console.error("Error fetching details:", err);
+      }
+    };
+
+    fetchDetails();
+  }, [movie, isAnilist, isTV]);
+
+  // --- Fetch Episodes ---
+  useEffect(() => {
+    if (!isTV || isAnilist) return;
+
+    const fetchEpisodes = async () => {
+      setLoadingEpisodes(true);
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/tv/${movie.id}/season/${selectedSeason}?api_key=${API_KEY}`
+        );
+        const data = await res.json();
+        setEpisodes(data.episodes || []);
+      } catch (err) {
+        console.error("Error fetching episodes:", err);
+      } finally {
+        setLoadingEpisodes(false);
+      }
+    };
+
+    fetchEpisodes();
+  }, [selectedSeason, movie.id, isTV, isAnilist]);
+
+  const handlePlayNow = (s = 1, e = 1) => {
+    const type = isTV ? 'tv' : 'movie';
+    const queryParams = isTV ? `?s=${s}&e=${e}` : '';
+    navigate(`/watch/${type}/${movie.id}/${slug}${queryParams}`);
+  };
+
+  const handleSeasonChange = (direction) => {
+    const currentIndex = seasons.findIndex(s => s.season_number === selectedSeason);
+    if (direction === 'prev' && currentIndex > 0) {
+        setSelectedSeason(seasons[currentIndex - 1].season_number);
+    } else if (direction === 'next' && currentIndex < seasons.length - 1) {
+        setSelectedSeason(seasons[currentIndex + 1].season_number);
+    }
+    setSearchQuery("");
+  };
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = 'unset'; };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex justify-center items-start overflow-y-auto bg-[#000] w-full scrollbar-hide animate-fade-in">
+
+      <div className="fixed inset-0 z-0">
+         <img 
+            src={backdropUrl} 
+            className="w-full h-screen object-cover opacity-20 filter grayscale-[0.5]" 
+            alt="background" 
+         />
+      </div>
+
+      <div className="fixed top-0 left-0 right-0 z-50 flex justify-between p-6 max-w-2xl mx-auto">
+          <button onClick={onClose} className="p-2 text-white/70 hover:text-white transition-colors">
+            <ChevronLeft size={28} />
+          </button>
+          <button className="p-2 text-white/70 hover:text-white transition-colors">
+             <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                <span className="text-xs"></span>
+             </div>
+          </button>
+      </div>
+
+      <div className="relative z-10 w-full max-w-2xl px-6 pt-30 pb-20 flex flex-col items-center">
+
+        {showTrailer && trailer ? (
+            <div className="w-full mb-8 animate-fade-in">
+                <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-white/10 bg-black shadow-2xl">
+                    <button 
+                        onClick={() => setShowTrailer(false)}
+                        className="absolute top-4 right-4 z-20 bg-black/60 p-2 rounded-full text-white hover:bg-white hover:text-black transition"
+                    >
+                        <X size={20} />
+                    </button>
+                    <iframe
+                        src={`https://www.youtube.com/embed/${trailer}?autoplay=1&rel=0`}
+                        className="w-full h-full"
+                        allow="autoplay; encrypted-media"
+                        allowFullScreen
+                    ></iframe>
+                </div>
+            </div>
+        ) : (
+            <>
+                <div className="w-full mb-6 flex flex-col items-center px-4">
+                    {logoUrl ? (
+                        <img src={logoUrl} alt={title} className="max-h-32 object-contain" />
+                    ) : (
+                        <h1 className="text-4xl text-white uppercase tracking-tighter text-center">
+                            {title}
+                        </h1>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-6 text-sm font-bold text-gray-300 mb-8">
+                    <span>{runtime} min</span>
+                    <span>{releaseYear}{isTV && `–${endYear}`}</span>
+                    <div className="flex items-center gap-1">
+                        <span className="text-white">{movie.vote_average?.toFixed(1)}</span>
+                        <span className="bg-[#f5c518] text-black px-1 rounded text-[10px] font-black">IMDb</span>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap justify-center gap-2 mb-4">
+                    {genres.map(g => (
+                        <button key={g.id || g} className="px-5 py-2 bg-[#1a1a1a] rounded-md text-xs font-bold text-gray-300 hover:bg-[#252525] transition border border-white/5">
+                            {isAnilist ? g : g.name}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="flex flex-wrap justify-center gap-2 mb-8">
+                    {cast.map(person => (
+                        <button key={person.id} className="px-5 py-2 bg-[#1a1a1a] rounded-md text-xs font-bold text-gray-300 hover:bg-[#252525] transition border border-white/5">
+                            {person.name}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="w-full mb-10 text-center">
+                    <p className="text-gray-400 text-[15px] leading-relaxed line-clamp-4">
+                        {overview}
+                    </p>
+                </div>
+            </>
+        )}
+
+        {!isTV && (
+            <div className="w-full flex flex-col gap-3 mb-10">
+                <button 
+                    onClick={() => handlePlayNow()}
+                    className="w-full bg-white text-black py-4 rounded-xl flex items-center justify-center gap-3 font-black text-lg hover:bg-gray-200 transition-all active:scale-[0.98]"
+                >
+                    <Play size={24} fill="black" />
+                    PLAY NOW
+                </button>
+                {trailer && !showTrailer && (
+                    <button 
+                        onClick={() => setShowTrailer(true)}
+                        className="w-full bg-white/10 text-white py-4 rounded-xl flex items-center justify-center gap-3 font-bold text-sm border border-white/10 hover:bg-white/20 transition-all"
+                    >
+                        <Clapperboard size={20} />
+                        WATCH TRAILER
+                    </button>
+                )}
+            </div>
+        )}
+
+        <div className="flex items-center gap-4 mb-12">
+                <button className="w-14 h-14 bg-[#1a1a1a] flex items-center justify-center rounded-xl border border-white/10 hover:bg-white/10 transition-all text-gray-400 hover:text-white">
+                    <Clapperboard size={24} onClick={() => setShowTrailer(true)} />
+                </button>
+        </div>
+
+        {isTV && (
+            <div className="w-full">
+                <div className="flex items-center justify-between mb-6 px-2">
+                    <button 
+                        onClick={() => handleSeasonChange('prev')}
+                        className="flex items-center gap-2 text-gray-500 hover:text-white transition font-bold"
+                    >
+                        <ChevronLeft size={20} /> Prev
+                    </button>
+
+                    <div className="relative group">
+                        <select 
+                            value={selectedSeason} 
+                            onChange={(e) => setSelectedSeason(Number(e.target.value))}
+                            className="appearance-none bg-transparent text-white font-bold text-lg outline-none cursor-pointer pr-6"
+                        >
+                            {seasons.map(s => (
+                                <option key={s.id} value={s.season_number} className="bg-[#1a1a1a]">Season {s.season_number}</option>
+                            ))}
+                        </select>
+                        <ChevronDown size={16} className="absolute right-0 top-1.5 pointer-events-none" />
+                    </div>
+
+                    <button 
+                        onClick={() => handleSeasonChange('next')}
+                        className="flex items-center gap-2 text-gray-500 hover:text-white transition font-bold"
+                    >
+                        Next <ChevronRight size={20} />
+                    </button>
+                </div>
+
+                <div className="relative w-full mb-6">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                    <input 
+                        type="text" 
+                        placeholder="search videos" 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-[#111] border border-white/5 rounded-lg py-3 pl-12 pr-10 text-sm outline-none focus:border-white/20 transition"
+                    />
+                    {searchQuery && (
+                        <button 
+                            onClick={() => setSearchQuery("")}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                        >
+                            <X size={18} />
+                        </button>
+                    )}
+                </div>
+
+                <div className="space-y-4">
+                    {loadingEpisodes ? (
+                        <div className="flex justify-center py-10">
+                            <div className="w-6 h-6 border-2 border-white/20 border-t-white animate-spin rounded-full"></div>
+                        </div>
+                    ) : filteredEpisodes.length > 0 ? (
+                        filteredEpisodes.map((ep) => (
+                            <div 
+                                key={ep.id}
+                                onClick={() => handlePlayNow(ep.season_number, ep.episode_number)}
+                                className="flex gap-4 p-2 hover:bg-white/5 rounded-lg transition-colors cursor-pointer group"
+                            >
+                                <div className="relative w-32 aspect-video rounded overflow-hidden flex-shrink-0 bg-black">
+                                    <img 
+                                        src={ep.still_path ? `https://image.tmdb.org/t/p/w300${ep.still_path}` : backdropUrl} 
+                                        className="w-full h-full object-cover" 
+                                        alt="" 
+                                    />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition">
+                                        <Play size={20} fill="white" className="text-white" />
+                                    </div>
+                                </div>
+                                <div className="flex flex-col justify-center">
+                                    <h4 className="text-[15px] font-bold text-gray-200 line-clamp-2 leading-tight">
+                                        {ep.episode_number}. {ep.name}
+                                    </h4>
+                                    <span className="text-xs text-gray-500 mt-1">
+                                        {ep.air_date ? new Date(ep.air_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+                                    </span>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="text-center py-10 text-gray-500 text-sm">
+                            No episodes found matching "{searchQuery}"
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+
+        {/* --- Related Content Moved Inside Scroll Container --- */}
+        <div className="w-full mt-16 border-t border-white/10 pt-10">
+            <h3 className="text-xl font-bold text-white mb-6 uppercase tracking-wider">You Might Also Like</h3>
+            <RelatedContent recommendations={recommendations} />
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+export default MovieDetails;
+
+import React from "react";
+import { Link } from "react-router-dom";
+import { Info, Play, X, CheckCircle2 } from "lucide-react";
+import { createSlug } from "../utils/helpers";
+
+export const HistoryRowCard = ({ movie, onRemove }) => {
+  const title = movie.title || movie.name;
+  const slug = createSlug(title);
+  const image = movie.backdrop_path
+    ? `https://image.tmdb.org/t/p/w500${movie.backdrop_path}`
+    : movie.poster_path
+    ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+    : "/No-Poster.png";
+
+  const season = movie.lastPlayedSeason || 1;
+  const episode = movie.lastPlayedEpisode || 1;
+
+  const toPath = movie.mediaType === "tv"
+    ? `/watch/tv/${movie.id}/${slug}?s=${season}&e=${episode}`
+    : `/watch/${movie.mediaType}/${movie.id}/${slug}`;
+
+  return (
+    <div className="relative group w-full aspect-video rounded-sm overflow-hidden bg-[#141414] transition-all duration-300 hover:scale-105 hover:z-30 shadow-xl border border-white/5">
+      <Link to={toPath} className="block w-full h-full">
+        <img src={image} alt={title} className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+
+        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/20 to-transparent flex flex-col justify-end p-2 md:p-3">
+          <h3 className="text-[10px] md:text-sm font-bold text-white truncate">{title}</h3>
+          <div className="flex items-center justify-between mt-0.5">
+            <span className="text-[9px] md:text-[10px] text-pink-500 font-bold uppercase">
+              {movie.mediaType === "tv" ? `S${season} E${episode}` : "Movie"}
+            </span>
+          </div>
+        </div>
+
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+          <div className="bg-white/10 backdrop-blur-md p-2 rounded-full border border-white/20">
+            <Play size={20} fill="white" className="text-white ml-0.5" />
+          </div>
+        </div>
+      </Link>
+
+      <button
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(movie.id, movie.mediaType); }}
+        className="absolute top-1.5 right-1.5 p-1 bg-black/60 text-white/70 hover:text-red-500 rounded-full transition-all z-40"
+      >
+        <X size={14} />
+      </button>
+    </div>
+  );
+};
+
+export const MovieCard = ({ movie, index, isSpecialView, onRemove, isBlurEnabled, isCurated }) => {
+  if (!movie) return null;
+
+  const type = movie.mediaType || movie.media_type || (movie.title ? "movie" : "tv");
+  const title = movie.title || movie.name;
+  const year = movie.release_date
+    ? movie.release_date.split("-")[0]
+    : movie.first_air_date
+    ? movie.first_air_date.split("-")[0]
+    : null;
+  const poster_path = movie.poster_path
+    ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+    : "/No-Poster.png";
+  const slug = createSlug(title);
+  const isAdultContent = movie.adult || movie.genre_ids?.includes(190370);
+  const isAnime = movie.genre_ids?.includes(16);
+  const shouldApplyBlur = isAdultContent && isBlurEnabled;
+
+  const animationClass = isSpecialView ? `movie-card-enter` : "";
+  const delayStyle = isSpecialView ? { animationDelay: `${index * 0.05}s` } : {};
+
+  return (
+    <div
+      className={`group w-full relative rounded-sm transition-transform animate-fade-in duration-300 hover:z-30 ${animationClass}`}
+      style={delayStyle}
+    >
+      <Link to={`/movie/${movie.id}/${slug}?type=${type}`} className="block">
+        <div className="w-full overflow-hidden relative rounded-sm aspect-[2/3] shadow-lg">
+          <img
+            src={poster_path}
+            alt={title}
+            loading="lazy"
+            className={`w-full h-full object-cover transition-all duration-300 hover:scale-105 group-hover:opacity-50 transition-opacity ${
+              shouldApplyBlur ? "filter-blur-sm" : ""
+            }`}
+          />
+
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+          <div className="bg-white/10 backdrop-blur-md p-2 rounded-full border border-white/20">
+            <Play size={20} fill="pink" className="text-white ml-0.5" />
+          </div>
+        </div>
+
+          {isCurated && (
+            <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-1 rounded bg-pink-600 text-white text-[9px] font-black uppercase tracking-wider shadow-lg z-20 animate-fade-in border border-white/20">
+              <CheckCircle2 size={10} fill="white" className="text-pink-600" />
+            </div>
+          )}
+
+          {year && (
+            <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded text-[10px] font-bold bg-black/60 text-white z-10">
+              {year}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-2 px-1">
+          <h3 className="text-[11px] md:text-sm font-semibold text-gray-200 truncate group-hover:text-white transition-colors">
+            {title}
+          </h3>
+        </div>
+        <div
+          className="px-1 py-0.5 rounded text-[10px] font-bold uppercase z-10"
+          style={{
+            color: isAdultContent ? "#f03a47" : isAnime ? "#e91e63" : "#3f51b5",
+          }}
+        >
+          {isAdultContent ? (
+            <span className="flex items-center gap-1">
+              <Info size={10} /> 18+
+            </span>
+          ) : (
+            <span className="flex items-center gap-1">
+              {isAnime ? "Anime" : type === "movie" ? "Movie" : "TV Show"}
+            </span>
+          )}
+        </div>
+      </Link>
+
+      {onRemove && (
+        <button
+          onClick={(e) => { e.preventDefault(); onRemove(movie.id, type); }}
+          className="absolute top-1 right-1 p-1.5 rounded-full bg-black/60 text-white hover:bg-red-600 transition z-20"
+        >
+          <X size={14} />
+        </button>
+      )}
+    </div>
+  );
+};
+
+export const TrendingMovieCard = ({ movie, index }) => {
+  const title = movie.title || movie.name;
+  const poster_path = movie.poster_path
+    ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+    : "/No-Poster.png";
+  const type = movie.media_type || (movie.title ? "movie" : "tv");
+  const slug = createSlug(title);
+  const toPath = `/movie/${movie.id}/${slug}?type=${type}`;
+  const displayIndex = index + 1;
+
+  return (
+    <div className="relative flex-shrink-0 w-full group pb-6">
+      <div className="absolute -left-5 bottom-8 z-10 select-none pointer-events-none">
+        <span
+          className={`text-[7rem] md:text-[9rem] font-black leading-none tracking-tighter italic text-black`}
+          style={{
+            WebkitTextStroke: "2px #555",
+            textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
+          }}
+        >
+          {displayIndex}
+        </span>
+      </div>
+
+      <Link
+        to={toPath}
+        className="block w-full relative pl-12 md:pl-16 hover:scale-105 transition-transform duration-300 origin-center z-20"
+      >
+        <img
+          src={poster_path}
+          alt={title}
+          className="w-full h-auto object-cover rounded-xs"
+        />
+        <div className="mt-2">
+          <h3 className="text-xs md:text-sm font-bold text-gray-300 truncate group-hover:text-white transition-colors">
+            {title}
+          </h3>
+        </div>
+      </Link>
+    </div>
+  );
+};
+
+import React from "react";
+import { Link } from "react-router-dom";
+import { Info, Play, X, CheckCircle2 } from "lucide-react";
+import { createSlug } from "../utils/helpers";
+
+export const HistoryRowCard = ({ movie, onRemove }) => {
+  const title = movie.title || movie.name;
+  const slug = createSlug(title);
+  const image = movie.backdrop_path
+    ? `https://image.tmdb.org/t/p/w500${movie.backdrop_path}`
+    : movie.poster_path
+    ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+    : "/No-Poster.png";
+
+  const season = movie.lastPlayedSeason || 1;
+  const episode = movie.lastPlayedEpisode || 1;
+
+  const toPath = movie.mediaType === "tv"
+    ? `/watch/tv/${movie.id}/${slug}?s=${season}&e=${episode}`
+    : `/watch/${movie.mediaType}/${movie.id}/${slug}`;
+
+  return (
+    <div className="relative group w-full aspect-video rounded-sm overflow-hidden bg-[#141414] transition-all duration-300 hover:scale-105 hover:z-30 shadow-xl border border-white/5">
+      <Link to={toPath} className="block w-full h-full">
+        <img src={image} alt={title} className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+
+        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/20 to-transparent flex flex-col justify-end p-2 md:p-3">
+          <h3 className="text-[10px] md:text-sm font-bold text-white truncate">{title}</h3>
+          <div className="flex items-center justify-between mt-0.5">
+            <span className="text-[9px] md:text-[10px] text-pink-500 font-bold uppercase">
+              {movie.mediaType === "tv" ? `S${season} E${episode}` : "Movie"}
+            </span>
+          </div>
+        </div>
+
+        <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-all duration-300 backdrop-blur-[2px]">
+          <div className="bg-white/10 backdrop-blur-xl p-3 rounded-full border border-white/30 shadow-[0_0_15px_rgba(255,255,255,0.2)] transform scale-75 group-hover:scale-100 transition-transform duration-300">
+            <Play size={20} fill="white" className="text-white ml-0.5" />
+          </div>
+        </div>
+      </Link>
+
+      <button
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(movie.id, movie.mediaType); }}
+        className="absolute top-1.5 right-1.5 p-1 bg-black/60 backdrop-blur-sm text-white/70 hover:text-red-500 rounded-full transition-all z-40 border border-white/10"
+      >
+        <X size={14} />
+      </button>
+    </div>
+  );
+};
+
+export const MovieCard = ({ movie, index, isSpecialView, onRemove, isBlurEnabled, isCurated }) => {
+  if (!movie) return null;
+
+  const type = movie.mediaType || movie.media_type || (movie.title ? "movie" : "tv");
+  const title = movie.title || movie.name;
+  const year = movie.release_date
+    ? movie.release_date.split("-")[0]
+    : movie.first_air_date
+    ? movie.first_air_date.split("-")[0]
+    : null;
+  const poster_path = movie.poster_path
+    ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+    : "/No-Poster.png";
+  const slug = createSlug(title);
+  const isAdultContent = movie.adult || movie.genre_ids?.includes(190370);
+  const isAnime = movie.genre_ids?.includes(16);
+  const shouldApplyBlur = isAdultContent && isBlurEnabled;
+
+  const animationClass = isSpecialView ? `movie-card-enter` : "";
+  const delayStyle = isSpecialView ? { animationDelay: `${index * 0.05}s` } : {};
+
+  return (
+    <div
+      className={`group w-full relative rounded-sm transition-transform animate-fade-in duration-300 hover:z-30 ${animationClass}`}
+      style={delayStyle}
+    >
+      <Link to={`/movie/${movie.id}/${slug}?type=${type}`} className="block">
+        <div className="w-full overflow-hidden relative rounded-sm aspect-[2/3] shadow-lg">
+          <img
+            src={poster_path}
+            alt={title}
+            loading="lazy"
+            className={`w-full h-full object-cover transition-all duration-300 hover:scale-105 group-hover:opacity-50 transition-opacity ${
+              shouldApplyBlur ? "filter-blur-sm" : ""
+            }`}
+          />
+
+          <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-all duration-300 backdrop-blur-[2px]">
+            <div className="bg-pink-600/30 backdrop-blur-xl p-3 rounded-full border border-pink-400/50 shadow-[0_0_15px_rgba(219,39,119,0.5)] transform scale-75 group-hover:scale-100 transition-transform duration-300">
+              <Play size={20} fill="white" className="text-white ml-0.5" />
+            </div>
+          </div>
+
+          {isCurated && (
+            <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-1 rounded bg-pink-600/80 backdrop-blur-md text-white text-[9px] font-black uppercase tracking-wider shadow-[0_4px_10px_rgba(219,39,119,0.4)] z-20 animate-fade-in border border-pink-400/50">
+              <CheckCircle2 size={10} fill="white" className="text-white" />
+            </div>
+          )}
+
+          {year && (
+            <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded text-[10px] font-bold bg-black/60 backdrop-blur-sm text-white z-10 border border-white/10">
+              {year}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-2 px-1">
+          <h3 className="text-[11px] md:text-sm font-semibold text-gray-200 truncate group-hover:text-white transition-colors">
+            {title}
+          </h3>
+        </div>
+        <div
+          className="px-1 py-0.5 rounded text-[10px] font-bold uppercase z-10"
+          style={{
+            color: isAdultContent ? "#f03a47" : isAnime ? "#e91e63" : "#3f51b5",
+          }}
+        >
+          {isAdultContent ? (
+            <span className="flex items-center gap-1">
+              <Info size={10} /> 18+
+            </span>
+          ) : (
+            <span className="flex items-center gap-1">
+              {isAnime ? "Anime" : type === "movie" ? "Movie" : "TV Show"}
+            </span>
+          )}
+        </div>
+      </Link>
+
+      {onRemove && (
+        <button
+          onClick={(e) => { e.preventDefault(); onRemove(movie.id, type); }}
+          className="absolute top-1 right-1 p-1.5 rounded-full bg-black/60 backdrop-blur-sm text-white hover:bg-red-600 transition z-20 border border-white/10"
+        >
+          <X size={14} />
+        </button>
+      )}
+    </div>
+  );
+};
+
+export const TrendingMovieCard = ({ movie, index }) => {
+  const title = movie.title || movie.name;
+  const poster_path = movie.poster_path
+    ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+    : "/No-Poster.png";
+  const type = movie.media_type || (movie.title ? "movie" : "tv");
+  const slug = createSlug(title);
+  const toPath = `/movie/${movie.id}/${slug}?type=${type}`;
+  const displayIndex = index + 1;
+
+  return (
+    <div className="relative flex-shrink-0 w-full group pb-6">
+      <div className="absolute -left-5 bottom-8 z-10 select-none pointer-events-none">
+        <span
+          className={`text-[7rem] md:text-[9rem] font-black leading-none tracking-tighter italic text-black`}
+          style={{
+            WebkitTextStroke: "2px #555",
+            textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
+          }}
+        >
+          {displayIndex}
+        </span>
+      </div>
+
+      <Link
+        to={toPath}
+        className="block w-full relative pl-12 md:pl-16 hover:scale-105 transition-transform duration-300 origin-center z-20"
+      >
+        <img
+          src={poster_path}
+          alt={title}
+          className="w-full h-auto object-cover rounded-xs"
+        />
+        <div className="mt-2">
+          <h3 className="text-xs md:text-sm font-bold text-gray-300 truncate group-hover:text-white transition-colors">
+            {title}
+          </h3>
+        </div>
+      </Link>
+    </div>
+  );
+};

@@ -1,0 +1,26 @@
+{
+  "name": "moviemania-nextjs",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "appwrite": "^26.2.0",
+    "lucide-react": "^1.24.0",
+    "next": "16.2.10",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-helmet-async": "^3.0.0",
+    "react-swipeable": "^7.0.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "tailwindcss": "^4"
+  }
+}
