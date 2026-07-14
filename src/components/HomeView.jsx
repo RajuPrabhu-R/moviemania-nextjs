@@ -4,7 +4,6 @@ import React, { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import InfiniteScrollTrigger from "./InfiniteScrollTrigger.jsx";
-// Added Preloader to this import!
 import { HeroBanner, MovieRow, SearchDropdown, MobileMenu, NoResultsFound, TopNavBar, Preloader } from "./AppComponents.jsx";
 import { MovieCard } from "./MovieCards.jsx";
 import { API_BASE_URL, API_KEY } from "../api/tmdb";
@@ -16,7 +15,6 @@ const HomeContent = () => {
   const urlViewId = searchParams.get("view");
   const { category: routeCategory } = useParams();
 
-  // Ensure these have safe defaults
   const { 
     history = [], 
     removeFromHistory = () => {}, 
@@ -55,22 +53,32 @@ const HomeContent = () => {
   const [searchTerm, setSearchTerm] = useState(specialViewQuery || "");
   const [searchCategory, setSearchCategory] = useState(routeCategory || "all");
 
-  // --- PRELOADER STATE ---
   const [appReady, setAppReady] = useState(false);
 
-  // Trigger the preloader to disappear 1 second after API data is ready
+  // --- SCROLL LOCK FIX APPLIED HERE ---
   useEffect(() => {
+    // 1. Lock the screen so the background can't scroll while loading
+    document.body.style.overflow = "hidden";
+
     if (!isInitialLoading) {
       const timer = setTimeout(() => {
+        // 2. Snap firmly to the top just in case
+        window.scrollTo(0, 0); 
+        // 3. Unlock the screen
+        document.body.style.overflow = ""; 
         setAppReady(true);
       }, 1000); 
-      return () => clearTimeout(timer);
+
+      return () => {
+        clearTimeout(timer);
+        document.body.style.overflow = "";
+      };
     }
   }, [isInitialLoading]);
+  // ------------------------------------
 
   const isSpecialView = specialViewType === "search" || !!urlViewId;
 
-  // Safe wrapper for history removal to prevent crashes
   const handleRemoveFromHistory = (item) => {
     if (removeFromHistory) removeFromHistory(item);
     setWatchHistory((prev) => prev.filter(h => h.id !== item.id));
@@ -180,7 +188,7 @@ const HomeContent = () => {
 
   return (
     <div className="bg-[#000000] min-h-screen text-white animate-fade-in">
-      {/* WIRED PRELOADER */}
+      
       <Preloader isLoaded={appReady} />
 
       <TopNavBar 
